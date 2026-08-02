@@ -114,6 +114,7 @@ const OrbitSerial = (() => {
     disconnect,
     calibrate,
     getTilt,
+    isConnected: () => !!port,
     set onData(fn) { onData = fn; },
     set onConnectionChange(fn) { onConnectionChange = fn; },
   };

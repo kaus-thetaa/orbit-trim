@@ -48,12 +48,43 @@
 
   // ---- state ----
   let currentTilt = { pitch: 0, roll: 0 };
+  let deviceConnected = false;
   let altitude = 0;
   let outOfToleranceSince = null;
   let running = false;
   let lastFrameTime = 0;
   let accentIndex = 1;
   let rafId = null;
+
+  // ---- keyboard demo simulation, used whenever no imu is connected ----
+  const SIM_ACCEL = 60;      // deg/s^2 while a key is held
+  const SIM_SPRING = 1.8;    // return-to-center rate when no key held
+  const SIM_MAX = 32;        // deg, simulated tilt clamp
+  const keysDown = new Set();
+  const simTilt = { pitch: 0, roll: 0 };
+
+  window.addEventListener("keydown", (e) => {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+      keysDown.add(e.key);
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("keyup", (e) => keysDown.delete(e.key));
+
+  function updateSimTilt(dt) {
+    if (keysDown.has("ArrowLeft")) simTilt.roll -= SIM_ACCEL * dt;
+    if (keysDown.has("ArrowRight")) simTilt.roll += SIM_ACCEL * dt;
+    if (keysDown.has("ArrowUp")) simTilt.pitch -= SIM_ACCEL * dt;
+    if (keysDown.has("ArrowDown")) simTilt.pitch += SIM_ACCEL * dt;
+
+    const anyHorizontal = keysDown.has("ArrowLeft") || keysDown.has("ArrowRight");
+    const anyVertical = keysDown.has("ArrowUp") || keysDown.has("ArrowDown");
+    if (!anyHorizontal) simTilt.roll -= simTilt.roll * Math.min(1, SIM_SPRING * dt);
+    if (!anyVertical) simTilt.pitch -= simTilt.pitch * Math.min(1, SIM_SPRING * dt);
+
+    simTilt.roll = Math.max(-SIM_MAX, Math.min(SIM_MAX, simTilt.roll));
+    simTilt.pitch = Math.max(-SIM_MAX, Math.min(SIM_MAX, simTilt.pitch));
+  }
 
   // ---- screen management ----
   function showScreen(name) {
@@ -68,12 +99,12 @@
 
   // ---- connection ----
   OrbitSerial.onConnectionChange = (connected) => {
+    deviceConnected = connected;
     connDot.classList.toggle("ok", connected);
     connLabel.textContent = connected ? "device connected" : "no device connected";
     btnConnect.textContent = connected ? "DEVICE CONNECTED" : "CONNECT DEVICE";
     btnConnect.disabled = connected;
     btnCalibrateHome.disabled = !connected;
-    btnLaunch.disabled = !connected;
   };
 
   OrbitSerial.onData = (tilt) => {
@@ -191,6 +222,10 @@
     outOfToleranceSince = null;
     running = true;
     lastFrameTime = performance.now();
+    simTilt.pitch = 0;
+    simTilt.roll = 0;
+    document.getElementById("demo-tag").hidden = deviceConnected;
+    document.getElementById("btn-calibrate-game").hidden = !deviceConnected;
     setAccent(1);
     showScreen("game");
     resizeRocketCanvas();
@@ -204,7 +239,7 @@
     const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
     lastFrameTime = now;
 
-    const { pitch, roll } = currentTilt;
+    const { pitch, roll } = deviceConnected ? currentTilt : (updateSimTilt(dt), simTilt);
     const tiltMag = Math.sqrt(pitch * pitch + roll * roll);
     const tol = tolerance(altitude);
     const inTolerance = tiltMag <= tol;
@@ -307,7 +342,7 @@
   });
 
   // ---- nav buttons ----
-  btnLaunch.addEventListener("click", startGame);
+  btnLaunch.addEventListener("click", () => { OrbitSound.unlock(); startGame(); });
   btnRetry.addEventListener("click", startGame);
   btnHome.addEventListener("click", () => {
     renderLeaderboard();
@@ -321,7 +356,7 @@
   showScreen("home");
 
   if (!OrbitSerial.isSupported()) {
-    connLabel.textContent = "web serial unsupported — use chrome/edge";
+    connLabel.textContent = "web serial unsupported — use chrome/edge, or launch in demo mode";
     btnConnect.disabled = true;
   }
 })();

@@ -134,6 +134,15 @@ body {
 }
 .dot.ok { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 
+.demo-hint {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  margin: -12px 0 22px;
+}
+
 .home-actions {
   display: flex;
   flex-direction: column;
@@ -278,6 +287,13 @@ body {
 }
 .warning-flash.show { opacity: 1; animation: driftpulse 1.6s ease-in-out infinite; }
 @keyframes driftpulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+.demo-tag {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
 
 /* ---- game over screen ---- */
 .over-title {
