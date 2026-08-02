@@ -1,0 +1,12 @@
+# arduino
+*.hex
+build/
+.pio/
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+*.swp
