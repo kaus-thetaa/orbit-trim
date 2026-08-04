@@ -20,15 +20,15 @@ html, body {
 
 #hud {
   position: fixed;
-  top: 18px;
+  top: 22px;
   left: 50%;
   transform: translateX(-50%);
-  font-family: 'Courier New', monospace;
-  font-weight: bold;
-  font-size: 20px;
-  letter-spacing: 2px;
-  color: #FFA6C1;
-  text-shadow: 0 0 8px rgba(163, 74, 117, 0.9);
+  font-family: 'Futura', 'Century Gothic', 'Trebuchet MS', Avenir, sans-serif;
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: 5px;
+  color: #FFE3EE;
+  text-shadow: 0 0 12px rgba(163, 74, 117, 0.85);
   text-transform: lowercase;
   pointer-events: none;
   user-select: none;
@@ -41,13 +41,13 @@ html, body {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 14px;
-  font-family: 'Courier New', monospace;
-  font-weight: bold;
-  font-size: 26px;
-  letter-spacing: 2px;
-  color: #FFA6C1;
-  text-shadow: 0 0 10px rgba(163, 74, 117, 0.9);
+  gap: 16px;
+  font-family: 'Futura', 'Century Gothic', 'Trebuchet MS', Avenir, sans-serif;
+  font-weight: 600;
+  font-size: 27px;
+  letter-spacing: 6px;
+  color: #FFE3EE;
+  text-shadow: 0 0 14px rgba(163, 74, 117, 0.85);
   text-transform: lowercase;
   pointer-events: none;
   user-select: none;
@@ -60,6 +60,8 @@ html, body {
 }
 
 #overlay .sub {
-  font-size: 15px;
-  color: #A34A75;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 4px;
+  color: rgba(255, 227, 238, 0.65);
 }

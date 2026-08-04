@@ -29,7 +29,7 @@ let score = 0;
 let distance = 0;
 
 let player, obstacles, collectibles, particles;
-let spawnTimers, stars, shootingStars, horizon, planetX;
+let spawnTimers, stars, shootingStars, horizon, farHorizon, planetX;
 
 function resetGame() {
   speed = CONFIG.speed.base;
@@ -66,7 +66,8 @@ function resetGame() {
   stars = buildStarfield();
   shootingStars = [];
   horizon = buildHorizon(CONFIG.world.horizonTileWidth, H * CONFIG.world.groundHeightRatio, CONFIG.world.horizonSeed);
-  planetX = W * 0.7;
+  farHorizon = buildHorizon(CONFIG.world.horizonTileWidth * 0.75, H * CONFIG.world.groundHeightRatio * 1.15, CONFIG.world.horizonSeed + 91);
+  planetX = W * 0.55;
 }
 
 function buildStarfield() {
@@ -323,9 +324,10 @@ function triggerGameOver() {
 function render() {
   drawSky();
   drawStars();
-  drawPlanet();
+  drawCrescentMoon();
+  const planetPos = drawPlanet();
   drawShootingStars();
-  drawHorizon();
+  drawHorizon(planetPos);
 
   if (state === STATE.READY) {
     drawTitleRocket();
@@ -407,44 +409,68 @@ function drawShootingStars() {
 }
 
 function drawPlanet() {
-  const loopWidth = W * 1.6;
-  const baseX = wrap(planetX + scroll.mid, loopWidth) - loopWidth * 0.3;
-  const y = groundY * 0.32;
-  const r = Math.min(W, H) * 0.14;
+  // loop width kept close to screen width so the planet is on-screen most
+  // of the time (alto's odyssey keeps its moon/sun almost always visible)
+  const loopWidth = W * 1.05;
+  const baseX = wrap(planetX + scroll.mid, loopWidth) - loopWidth * 0.08;
+  const y = groundY * 0.3;
+  const r = Math.min(W, H) * 0.2;
 
-  const glow = ctx.createRadialGradient(baseX, y, r * 0.2, baseX, y, r * 2.4);
-  glow.addColorStop(0, CONFIG.palette.planetGlow);
+  const glow = ctx.createRadialGradient(baseX, y, r * 0.15, baseX, y, r * 3.4);
+  glow.addColorStop(0, 'rgba(255, 214, 230, 0.55)');
+  glow.addColorStop(0.35, CONFIG.palette.planetGlow);
   glow.addColorStop(1, 'rgba(231,183,209,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(baseX, y, r * 2.4, 0, Math.PI * 2);
+  ctx.arc(baseX, y, r * 3.4, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = CONFIG.palette.planetCore;
   ctx.beginPath();
   ctx.arc(baseX, y, r, 0, Math.PI * 2);
   ctx.fill();
+
+  // soft craters for a touch of surface texture, not flat clip-art
+  ctx.fillStyle = 'rgba(163, 74, 117, 0.18)';
+  ctx.beginPath(); ctx.arc(baseX - r * 0.35, y - r * 0.2, r * 0.22, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(baseX + r * 0.28, y + r * 0.32, r * 0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(baseX + r * 0.1, y - r * 0.38, r * 0.1, 0, Math.PI * 2); ctx.fill();
+
+  return { x: baseX, y, r };
 }
 
-function drawHorizon() {
+function drawHorizon(planet) {
   const p = CONFIG.palette;
 
-  // atmospheric haze bleeding up from the terrain, ties foreground to sky
-  const haze = ctx.createLinearGradient(0, groundY - H * 0.22, 0, groundY);
+  // strong atmospheric haze bleeding up from the terrain, brighter where
+  // the planet glow overlaps so the whole scene reads as one lit source
+  const haze = ctx.createLinearGradient(0, groundY - H * 0.34, 0, groundY);
   haze.addColorStop(0, 'rgba(255,166,193,0)');
   haze.addColorStop(1, p.hazeColor);
   ctx.fillStyle = haze;
-  ctx.fillRect(0, groundY - H * 0.22, W, H * 0.22);
+  ctx.fillRect(0, groundY - H * 0.34, W, H * 0.34);
 
-  // silhouette fill gets a subtle top-to-bottom gradient so the ridge line
-  // catches a hint of sky color instead of reading as flat cut-out shape
+  if (planet) {
+    const bleed = ctx.createRadialGradient(planet.x, groundY, 0, planet.x, groundY, planet.r * 3.2);
+    bleed.addColorStop(0, 'rgba(255, 200, 220, 0.28)');
+    bleed.addColorStop(1, 'rgba(255, 200, 220, 0)');
+    ctx.fillStyle = bleed;
+    ctx.fillRect(planet.x - planet.r * 3.2, groundY - H * 0.3, planet.r * 6.4, H * 0.3);
+  }
+
+  drawHorizonLayer(farHorizon, p.horizonFar2, p.horizonFar2Deep, scroll.mid * 0.6, 0.72, false);
+  drawHorizonLayer(horizon, p.horizonNear, p.horizonFar, scroll.fore, 1, true);
+}
+
+// draws one silhouette band; heightMul lets the far layer sit shorter/back
+function drawHorizonLayer(layer, colorNear, colorFar, scrollOffset, heightMul, withSpires) {
   const fill = ctx.createLinearGradient(0, groundY - H * CONFIG.world.groundHeightRatio, 0, H);
-  fill.addColorStop(0, p.horizonNear);
-  fill.addColorStop(1, p.horizonFar);
+  fill.addColorStop(0, colorNear);
+  fill.addColorStop(1, colorFar);
 
-  const tw = horizon.tileWidth;
-  const offset = wrap(scroll.fore, tw);
-  const step = 6;
+  const tw = layer.tileWidth;
+  const offset = wrap(scrollOffset, tw);
+  const step = 8;
 
   ctx.fillStyle = fill;
   ctx.beginPath();
@@ -452,12 +478,56 @@ function drawHorizon() {
 
   for (let x = -step; x <= W + step; x += step) {
     const sampleX = wrap(x - offset, tw);
-    const y = groundY - horizon.heightAt(sampleX);
+    const y = groundY - layer.heightAt(sampleX) * heightMul;
     ctx.lineTo(x, y);
   }
   ctx.lineTo(W + step, H);
   ctx.closePath();
   ctx.fill();
+
+  if (withSpires) drawSpires(layer, offset, colorFar);
+}
+
+// thin needle-like silhouettes rising off the ridge line, drawn once per
+// visible tile period so they scroll seamlessly with the terrain under them
+function drawSpires(layer, offset, color) {
+  const tw = layer.tileWidth;
+  const firstPeriod = Math.floor((-100 - offset) / tw) - 1;
+  const lastPeriod = Math.ceil((W + 100 - offset) / tw) + 1;
+
+  ctx.fillStyle = color;
+  for (let k = firstPeriod; k <= lastPeriod; k++) {
+    for (const sp of layer.spires) {
+      const screenX = sp.x + offset + k * tw;
+      if (screenX < -60 || screenX > W + 60) continue;
+      const baseY = groundY - layer.heightAt(sp.x);
+      const topY = baseY - sp.height;
+      ctx.beginPath();
+      ctx.moveTo(screenX - sp.width / 2, baseY + 2);
+      ctx.lineTo(screenX, topY);
+      ctx.lineTo(screenX + sp.width / 2, baseY + 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
+// small decorative crescent, sits high and near-static like a distant moon
+function drawCrescentMoon() {
+  const x = wrap(W * 0.82 + scroll.back * 0.4, W * 1.3) - W * 0.15;
+  const y = H * 0.12;
+  const r = Math.min(W, H) * 0.026;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(x + r * 0.55, y - r * 0.3, r * 0.92, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawPlayer() {

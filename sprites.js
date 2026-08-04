@@ -125,7 +125,20 @@ function buildHorizon(tileWidth, baseHeight, seed) {
     return baseHeight * (0.32 + norm * 0.85);
   }
 
-  return { tileWidth, heightAt };
+  // sparse tall thin spires (launch towers / rock needles) breaking the
+  // ridge line, like the small structures poking above alto's mountains
+  const spires = [];
+  const spireCount = 3 + Math.floor(rand() * 2);
+  for (let i = 0; i < spireCount; i++) {
+    const x = rand() * tileWidth;
+    spires.push({
+      x,
+      height: baseHeight * (0.9 + rand() * 1.1),
+      width: baseHeight * (0.1 + rand() * 0.08)
+    });
+  }
+
+  return { tileWidth, heightAt, spires };
 }
 
 function mulberry32(seed) {
