@@ -442,21 +442,12 @@ function drawPlanet() {
 function drawHorizon(planet) {
   const p = CONFIG.palette;
 
-  // strong atmospheric haze bleeding up from the terrain, brighter where
-  // the planet glow overlaps so the whole scene reads as one lit source
+  // atmospheric haze bleeding up from the terrain, ties foreground to sky
   const haze = ctx.createLinearGradient(0, groundY - H * 0.34, 0, groundY);
   haze.addColorStop(0, 'rgba(255,166,193,0)');
   haze.addColorStop(1, p.hazeColor);
   ctx.fillStyle = haze;
   ctx.fillRect(0, groundY - H * 0.34, W, H * 0.34);
-
-  if (planet) {
-    const bleed = ctx.createRadialGradient(planet.x, groundY, 0, planet.x, groundY, planet.r * 3.2);
-    bleed.addColorStop(0, 'rgba(255, 200, 220, 0.28)');
-    bleed.addColorStop(1, 'rgba(255, 200, 220, 0)');
-    ctx.fillStyle = bleed;
-    ctx.fillRect(planet.x - planet.r * 3.2, groundY - H * 0.3, planet.r * 6.4, H * 0.3);
-  }
 
   drawHorizonLayer(farHorizon, p.horizonFar2, p.horizonFar2Deep, scroll.mid * 0.6, 0.72, false);
   drawHorizonLayer(horizon, p.horizonNear, p.horizonFar, scroll.fore, 1, true);
@@ -513,21 +504,24 @@ function drawSpires(layer, offset, color) {
 }
 
 // small decorative crescent, sits high and near-static like a distant moon
+// built from two solid circles (no composite ops) so it can't silently
+// break rendering on browsers that special-case destination-out oddly
 function drawCrescentMoon() {
   const x = wrap(W * 0.82 + scroll.back * 0.4, W * 1.3) - W * 0.15;
   const y = H * 0.12;
   const r = Math.min(W, H) * 0.026;
 
-  ctx.save();
   ctx.fillStyle = 'rgba(255,255,255,0.82)';
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalCompositeOperation = 'destination-out';
+
+  // shadow circle painted in the local sky color instead of cut via
+  // composite mode, avoids any cross-browser compositing edge cases
+  ctx.fillStyle = CONFIG.palette.sky2;
   ctx.beginPath();
   ctx.arc(x + r * 0.55, y - r * 0.3, r * 0.92, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 }
 
 function drawPlayer() {
@@ -595,11 +589,18 @@ function wrap(v, m) {
 }
 
 // ---------- main loop ----------
+// wrapped in try/catch so a single bad frame logs to console instead of
+// silently freezing the entire animation loop (requestAnimationFrame never
+// reschedules itself if the callback throws uncaught)
 function loop(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
-  update(dt);
-  render();
+  try {
+    update(dt);
+    render();
+  } catch (err) {
+    console.error('frame error', err);
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
