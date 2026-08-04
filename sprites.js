@@ -84,31 +84,6 @@ SPRITES.meteor = {
   ]
 };
 
-// ---------- meteor hard variant (cracked, gold flame) ----------
-SPRITES.meteorHard = {
-  colors: {
-    M: '#6B5A56',  // cracked rock core
-    m: '#453733',  // rock shade
-    C: '#1E1815',  // crack lines
-    T: '#FFD34D',  // gold trail outer
-    t: '#FFF0A8'   // gold trail inner
-  },
-  body: [
-    '..MMMM..',
-    '.MCMMMM.',
-    'MMMCMMMM',
-    'MMMMCmMM',
-    'MMCmMMCM',
-    '.MMMCMM.',
-    '..MMMM..'
-  ],
-  trail: [
-    '.tT.',
-    'TtTT',
-    '.tT.'
-  ]
-};
-
 // ---------- satellite (collectible) ----------
 SPRITES.satellite = {
   colors: {
@@ -126,19 +101,31 @@ SPRITES.satellite = {
   ]
 };
 
-// ---------- asteroid horizon silhouette chunk (foreground layer) ----------
-// generates a jagged silhouette path segment procedurally, not a fixed grid
-function buildAsteroidHorizon(width, baseHeight, seed) {
-  const points = [];
-  let rand = mulberry32(seed);
-  const segments = Math.ceil(width / 40) + 2;
-  let x = 0;
-  for (let i = 0; i <= segments; i++) {
-    const h = baseHeight * (0.55 + rand() * 0.9);
-    points.push({ x, h });
-    x += 30 + rand() * 30;
+// ---------- rolling terrain horizon (foreground layer, alto-style) ----------
+// smooth silhouette built from a few stacked sine waves instead of jagged
+// random spikes, tuned with integer frequencies so it repeats perfectly
+// across tileWidth with zero seam when the render loop wraps x % tileWidth
+function buildHorizon(tileWidth, baseHeight, seed) {
+  const rand = mulberry32(seed);
+  const waves = [
+    { freq: 1, amp: 0.55, phase: rand() * Math.PI * 2 },
+    { freq: 2, amp: 0.30, phase: rand() * Math.PI * 2 },
+    { freq: 3, amp: 0.16, phase: rand() * Math.PI * 2 },
+    { freq: 5, amp: 0.09, phase: rand() * Math.PI * 2 }
+  ];
+
+  function heightAt(x) {
+    let h = 0;
+    for (const w of waves) {
+      h += Math.sin((x / tileWidth) * Math.PI * 2 * w.freq + w.phase) * w.amp;
+    }
+    // normalize roughly into 0..1 then scale, keep terrain mostly low
+    // with occasional taller rises rather than symmetric random noise
+    const norm = (h + 1) / 2.2;
+    return baseHeight * (0.32 + norm * 0.85);
   }
-  return points;
+
+  return { tileWidth, heightAt };
 }
 
 function mulberry32(seed) {

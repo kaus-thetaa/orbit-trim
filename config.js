@@ -12,14 +12,17 @@ const CONFIG = {
     star: '#FFFFFF',
     shootingStar: '#FFE9F2',
     planetCore: '#E7B7D1',
-    planetGlow: 'rgba(231, 183, 209, 0.35)',
-    asteroidFill: '#160C29',
-    asteroidEdge: '#0B0616'
+    planetGlow: 'rgba(231, 183, 209, 0.38)',
+    horizonNear: '#2B1B45',   // lit edge of terrain, blends toward sky
+    horizonFar: '#140A24',    // deep silhouette base
+    hazeColor: 'rgba(255, 166, 193, 0.16)' // atmospheric bleed near ground
   },
 
   world: {
     pixelScale: 4,          // sprite pixel-art scale factor
-    groundHeightRatio: 0.16 // asteroid horizon height as fraction of canvas height
+    groundHeightRatio: 0.16, // horizon height as fraction of canvas height
+    horizonTileWidth: 1400,  // period of the rolling terrain, must tile seamlessly
+    horizonSeed: 1337
   },
 
   speed: {
@@ -46,7 +49,6 @@ const CONFIG = {
     spawnIntervalMin: 620,    // fastest spawn interval reached at ramp
     rampMs: 45000,            // time to reach min spawn interval
     speedVariance: 0.35,      // +/- fraction random speed offset per meteor
-    hardVariantChance: 0.35,  // chance to spawn the cracked gold variant
     minGapPx: 210             // minimum vertical gap between simultaneous meteors
   },
 

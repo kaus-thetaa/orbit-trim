@@ -29,7 +29,7 @@ let score = 0;
 let distance = 0;
 
 let player, obstacles, collectibles, particles;
-let spawnTimers, stars, shootingStars, asteroidChunk, planetX;
+let spawnTimers, stars, shootingStars, horizon, planetX;
 
 function resetGame() {
   speed = CONFIG.speed.base;
@@ -38,14 +38,20 @@ function resetGame() {
   distance = 0;
   scroll = { back: 0, mid: 0, fore: 0 };
 
+  // rocket sprite is drawn nose-up then rotated 90deg to face right (see
+  // drawPlayer), so its on-screen bounding box has width/height swapped
+  // relative to the raw grid dimensions
+  const rawW = gridWidth(SPRITES.rocket.body) * CONFIG.world.pixelScale;
+  const rawH = gridHeight(SPRITES.rocket.body) * CONFIG.world.pixelScale;
+
   player = {
     x: CONFIG.player.xPosition,
     y: H * CONFIG.player.startY,
     vy: 0,
     flameFrame: 0,
     flameTimer: 0,
-    w: 8 * CONFIG.world.pixelScale,
-    h: 11 * CONFIG.world.pixelScale
+    w: rawH,
+    h: rawW
   };
 
   obstacles = [];
@@ -59,7 +65,7 @@ function resetGame() {
 
   stars = buildStarfield();
   shootingStars = [];
-  asteroidChunk = buildAsteroidHorizon(W * 3, H * CONFIG.world.groundHeightRatio, 1337);
+  horizon = buildHorizon(CONFIG.world.horizonTileWidth, H * CONFIG.world.groundHeightRatio, CONFIG.world.horizonSeed);
   planetX = W * 0.7;
 }
 
@@ -113,8 +119,7 @@ setOverlay('tap start');
 
 // ---------- spawning ----------
 function spawnObstacle() {
-  const isHard = Math.random() < CONFIG.obstacles.hardVariantChance;
-  const sprite = isHard ? SPRITES.meteorHard : SPRITES.meteor;
+  const sprite = SPRITES.meteor;
   const scale = CONFIG.world.pixelScale;
   const h = gridHeight(sprite.body) * scale;
   const y = Math.random() * (groundY - h - 40) + 10;
@@ -320,12 +325,42 @@ function render() {
   drawStars();
   drawPlanet();
   drawShootingStars();
-  drawAsteroidHorizon();
-  drawCollectibles();
-  drawObstacles();
-  drawParticles();
-  drawPlayer();
+  drawHorizon();
+
+  if (state === STATE.READY) {
+    drawTitleRocket();
+  } else {
+    drawCollectibles();
+    drawObstacles();
+    drawParticles();
+    drawPlayer();
+  }
+
   drawHud();
+}
+
+// launch-screen hero rocket, bigger than gameplay scale with its own idle
+// flame animation so the title screen reads as rocket first, text second
+function drawTitleRocket() {
+  const scale = CONFIG.world.pixelScale * 2.6;
+  const sprite = SPRITES.rocket;
+  const frame = Math.floor(performance.now() / CONFIG.player.flameFrameMs) % CONFIG.player.flameFrames;
+  const flameGrid = sprite.flames[frame];
+  const flameColors = sprite.flameColors[frame];
+
+  const bodyW = gridWidth(sprite.body) * scale;
+  const bodyH = gridHeight(sprite.body) * scale;
+  const cx = W / 2;
+  const cy = H * 0.34;
+  const originX = -bodyW / 2;
+  const originY = -bodyH / 2;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.PI / 2);
+  drawPixelGrid(ctx, flameGrid, flameColors, originX + scale, originY + bodyH - scale, scale);
+  drawPixelGrid(ctx, sprite.body, sprite.colors, originX, originY, scale);
+  ctx.restore();
 }
 
 function drawSky() {
@@ -391,26 +426,38 @@ function drawPlanet() {
   ctx.fill();
 }
 
-function drawAsteroidHorizon() {
+function drawHorizon() {
   const p = CONFIG.palette;
-  const totalWidth = asteroidChunk[asteroidChunk.length - 1].x;
-  const offset = wrap(scroll.fore, totalWidth);
 
-  ctx.fillStyle = p.asteroidFill;
-  ctx.strokeStyle = p.asteroidEdge;
-  ctx.lineWidth = 2;
+  // atmospheric haze bleeding up from the terrain, ties foreground to sky
+  const haze = ctx.createLinearGradient(0, groundY - H * 0.22, 0, groundY);
+  haze.addColorStop(0, 'rgba(255,166,193,0)');
+  haze.addColorStop(1, p.hazeColor);
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, groundY - H * 0.22, W, H * 0.22);
 
-  for (let pass = -1; pass <= 1; pass++) {
-    ctx.beginPath();
-    ctx.moveTo(offset + pass * totalWidth, H);
-    for (const pt of asteroidChunk) {
-      ctx.lineTo(offset + pass * totalWidth + pt.x, groundY - pt.h + groundY * 0.06 * Math.sin(pt.x));
-    }
-    ctx.lineTo(offset + pass * totalWidth + totalWidth, H);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+  // silhouette fill gets a subtle top-to-bottom gradient so the ridge line
+  // catches a hint of sky color instead of reading as flat cut-out shape
+  const fill = ctx.createLinearGradient(0, groundY - H * CONFIG.world.groundHeightRatio, 0, H);
+  fill.addColorStop(0, p.horizonNear);
+  fill.addColorStop(1, p.horizonFar);
+
+  const tw = horizon.tileWidth;
+  const offset = wrap(scroll.fore, tw);
+  const step = 6;
+
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(-step, H);
+
+  for (let x = -step; x <= W + step; x += step) {
+    const sampleX = wrap(x - offset, tw);
+    const y = groundY - horizon.heightAt(sampleX);
+    ctx.lineTo(x, y);
   }
+  ctx.lineTo(W + step, H);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawPlayer() {
@@ -419,8 +466,19 @@ function drawPlayer() {
   const flameGrid = sprite.flames[player.flameFrame];
   const flameColors = sprite.flameColors[player.flameFrame];
 
-  drawPixelGrid(ctx, flameGrid, flameColors, player.x + scale, player.y + player.h - scale, scale);
-  drawPixelGrid(ctx, sprite.body, sprite.colors, player.x, player.y, scale);
+  const bodyW = gridWidth(sprite.body) * scale;
+  const bodyH = gridHeight(sprite.body) * scale;
+  const cx = player.x + player.w / 2;
+  const cy = player.y + player.h / 2;
+  const originX = -bodyW / 2;
+  const originY = -bodyH / 2;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.PI / 2); // nose faces screen-right, flame trails left behind it
+  drawPixelGrid(ctx, flameGrid, flameColors, originX + scale, originY + bodyH - scale, scale);
+  drawPixelGrid(ctx, sprite.body, sprite.colors, originX, originY, scale);
+  ctx.restore();
 }
 
 function drawObstacles() {
