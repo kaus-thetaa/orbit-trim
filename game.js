@@ -19,10 +19,9 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ---------- serial input setup ----------
+// ---------- serial input setup with debug & MKR fix ----------
 let serialPort, serialReader;
 
-// Create a live debug overlay so we can see exactly what the MKR is sending
 const debugText = document.createElement('div');
 debugText.style.cssText = 'position:absolute; top:50px; left:10px; color:#00FF00; z-index:100; font-family:monospace; background:rgba(0,0,0,0.8); padding:8px; border-radius:4px; pointer-events:none;';
 debugText.innerText = "Debug: Disconnected";
@@ -34,7 +33,7 @@ if (connectBtn) {
       serialPort = await navigator.serial.requestPort();
       await serialPort.open({ baudRate: 115200 });
       
-      // The MKR DTR fix
+      // MKR Native USB DTR/RTS fix
       await serialPort.setSignals({ dataTerminalReady: true, requestToSend: true });
       
       const decoder = new TextDecoderStream();
@@ -58,25 +57,22 @@ async function readSerialLoop() {
     if (value) {
       buffer += value;
       let lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep incomplete lines in the buffer
-      
+      buffer = lines.pop(); 
       if (lines.length > 0) {
-        // Grab the most recent full line to process
         let lastLine = lines[lines.length - 1].trim();
-        
-        // DISPLAY RAW SERIAL OUTPUT ON SCREEN
         debugText.innerText = "RAW RX: " + lastLine;
 
         let latestAccel = parseFloat(lastLine);
         if (!isNaN(latestAccel)) {
-          // Map tilt acceleration (roughly -5 to +5 m/s^2) to Input.axis (-1 to 1)
-          Input.axis = Math.max(-1, Math.min(1, latestAccel / -5.0));
+          // Map tilt acceleration to independent serial tilt variable
+          window.serialTilt = Math.max(-1, Math.min(1, latestAccel / -5.0));
         }
       }
     }
     if (done) break;
   }
 }
+
 // ---------- state ----------
 const STATE = { READY: 'ready', PLAYING: 'playing', CRASHING: 'crashing', DEAD: 'dead' };
 let state = STATE.READY;
@@ -84,7 +80,7 @@ let state = STATE.READY;
 let scroll = { back: 0, mid: 0, fore: 0 };
 let speed = CONFIG.speed.base;
 let elapsed = 0, score = 0, distance = 0, collectedScore = 0, graceTimer = 0;
-let shakeTime = 0, shakeIntensity = 0; // Screen shake vars
+let shakeTime = 0, shakeIntensity = 0;
 
 let player, obstacles, collectibles, particles, turrets, dots;
 let spawnTimers, stars, shootingStars, horizon, farHorizon, planetX;
@@ -254,11 +250,13 @@ function updatePlayer(dt) {
     return;
   }
 
-  const targetVy = Input.axis * CONFIG.player.moveSpeed;
+  // Prioritize serial data from MKR if active, otherwise fallback to keyboard Input.axis
+  let currentTilt = typeof window.serialTilt !== 'undefined' ? window.serialTilt : Input.axis;
+  const targetVy = currentTilt * CONFIG.player.moveSpeed;
+
   player.vy += (targetVy - player.vy) * CONFIG.player.smoothing;
   player.y += player.vy * dt;
 
-  // Thruster engine tail particles
   if (Math.abs(player.vy) > 20 || Math.random() < 0.3) {
     particles.push({
       x: player.x,
@@ -406,7 +404,7 @@ function triggerCrash() {
   if (state === STATE.CRASHING) return;
   state = STATE.CRASHING;
   player.vy = -260;
-  shakeTime = 0.3; // Trigger screen shake
+  shakeTime = 0.3; 
   shakeIntensity = 8;
   localStorage.setItem('rocketHigh', highScore);
 }
@@ -418,9 +416,11 @@ function triggerGameOver() {
 
 // ---------- render ----------
 function render() {
+  // CRITICAL FIX: Clear canvas completely every frame to eliminate smear/ghosting trails
+  ctx.clearRect(0, 0, W, H);
+
   ctx.save();
   
-  // Apply Screen Shake
   if (shakeTime > 0) {
     const dx = (Math.random() - 0.5) * shakeIntensity;
     const dy = (Math.random() - 0.5) * shakeIntensity;
@@ -611,7 +611,6 @@ function drawPoly(cx, cy, points) {
 
 function drawTurrets() {
   for (const t of turrets) {
-    // Telegraphed Laser Sight
     if (t.reload < 0.25 && state === STATE.PLAYING) {
       ctx.beginPath();
       ctx.moveTo(t.x + t.w/2, groundY - 11);
