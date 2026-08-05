@@ -360,13 +360,28 @@ function updateObstacles(dt) {
   for (const o of obstacles) {
     o.x -= speed * o.speedMult * dt;
     o.trailPhase += dt * 12;
-    o.y = Math.min(o.y, groundY - o.h - 10);
+    
+    // Clamp Y so asteroids never sink below the rolling horizon hills
+    const terrainH = horizon.heightAt(wrap(o.x, horizon.tileWidth));
+    const maxAllowedY = groundY - terrainH - o.h - 12;
+    if (o.y > maxAllowedY) {
+      o.y = maxAllowedY;
+    }
   }
   obstacles = obstacles.filter(o => o.x > -80);
 }
+
 function updateCollectibles(dt) {
   for (const c of collectibles) {
-    c.x -= speed * dt; c.bob += dt * 4; c.y = Math.min(c.y, groundY - c.h - 10);
+    c.x -= speed * dt; 
+    c.bob += dt * 4; 
+    
+    // Ensure collectibles stay above the terrain as well
+    const terrainH = horizon.heightAt(wrap(c.x, horizon.tileWidth));
+    const maxAllowedY = groundY - terrainH - c.h - 12;
+    if (c.y > maxAllowedY) {
+      c.y = maxAllowedY;
+    }
   }
   collectibles = collectibles.filter(c => c.x > -60 && !c.taken);
 }
