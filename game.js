@@ -601,15 +601,24 @@ function wrap(v, m) {
 // ---------- main loop ----------
 // wrapped in try/catch so a single bad frame logs to console instead of
 // silently freezing the entire animation loop (requestAnimationFrame never
-// reschedules itself if the callback throws uncaught)
+// reschedules itself if the callback throws uncaught). also draws a small
+// red marker so a broken frame is visible even without devtools open
+let frameErrorFlag = false;
+
 function loop(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
   try {
     update(dt);
     render();
+    frameErrorFlag = false;
   } catch (err) {
-    console.error('frame error', err);
+    if (!frameErrorFlag) {
+      console.error('frame error', err);
+      frameErrorFlag = true;
+    }
+    ctx.fillStyle = '#FF3B3B';
+    ctx.fillRect(10, 10, 14, 14);
   }
   requestAnimationFrame(loop);
 }
