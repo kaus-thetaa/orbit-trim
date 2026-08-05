@@ -18,20 +18,33 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ---------- bulletproof serial ui & input setup ----------
+// ---------- serial ui, filtering & calibration setup ----------
 let serialPort, serialReader;
 let serialLogBuffer = [];
+
+// Calibration & Filtering state variables
+let serialZeroOffset = 0;
+let isCalibrated = false;
+let smoothedTilt = 0;
+const filterAlpha = 0.25;    // Lower = smoother, Higher = more responsive
+const sensitivityMultiplier = 2.2; // Increase this if it's still moving too little
 
 // Create UI Container anchored safely to the top-left viewport
 const serialUIContainer = document.createElement('div');
 serialUIContainer.style.cssText = 'position:fixed; top:10px; left:10px; z-index:99999; font-family:monospace; display:flex; flex-direction:column; gap:6px; pointer-events:auto;';
 document.body.appendChild(serialUIContainer);
 
-// Dynamically create the Connect Button so it is guaranteed to exist
+// Dynamically create the Connect Button
 const dynamicConnectBtn = document.createElement('button');
-dynamicConnectBtn.innerText = "🔌 Connect MKR Serial";
+dynamicConnectBtn.innerText = "🔌 Connect MKR/ICM Serial";
 dynamicConnectBtn.style.cssText = 'background:#00FF00; color:#000; border:2px solid #fff; padding:8px 12px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:13px; font-weight:bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);';
 serialUIContainer.appendChild(dynamicConnectBtn);
+
+// Calibrate Button (appears once connected)
+const calibrateBtn = document.createElement('button');
+calibrateBtn.innerText = "🎯 Re-Calibrate Flat";
+calibrateBtn.style.cssText = 'display:none; background:#FFA500; color:#000; border:2px solid #fff; padding:6px 10px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:12px; font-weight:bold;';
+serialUIContainer.appendChild(calibrateBtn);
 
 // Toggle Serial Monitor Button
 const toggleMonitorBtn = document.createElement('button');
@@ -42,7 +55,7 @@ serialUIContainer.appendChild(toggleMonitorBtn);
 // Serial Monitor Console Box
 const monitorBox = document.createElement('div');
 monitorBox.style.cssText = 'display:none; width:320px; height:180px; background:rgba(0,0,0,0.95); color:#00FF00; border:1px solid #00FF00; padding:8px; border-radius:4px; overflow-y:auto; font-size:11px; white-space:pre-wrap;';
-monitorBox.innerText = "Serial Monitor Initialized. Click 'Connect MKR Serial' above.\n";
+monitorBox.innerText = "Serial Monitor Initialized. Click 'Connect MKR/ICM Serial' above.\n";
 serialUIContainer.appendChild(monitorBox);
 
 toggleMonitorBtn.addEventListener('click', () => {
@@ -55,6 +68,11 @@ toggleMonitorBtn.addEventListener('click', () => {
   }
 });
 
+calibrateBtn.addEventListener('click', () => {
+  isCalibrated = false; // Triggers fresh zero offset capture on next incoming packet
+  appendSerialLog("Calibration requested. Place sensor flat and hold still...");
+});
+
 dynamicConnectBtn.addEventListener('click', async () => {
   if (!navigator.serial) {
     alert("Web Serial API is not supported in this browser! Please use Google Chrome or Microsoft Edge.");
@@ -64,15 +82,18 @@ dynamicConnectBtn.addEventListener('click', async () => {
     serialPort = await navigator.serial.requestPort();
     await serialPort.open({ baudRate: 115200 });
     
-    // MKR Native USB DTR/RTS handshake fix
+    // Native USB DTR/RTS handshake fix
     await serialPort.setSignals({ dataTerminalReady: true, requestToSend: true });
     
     const decoder = new TextDecoderStream();
     serialPort.readable.pipeTo(decoder.writable);
     serialReader = decoder.readable.getReader();
-    dynamicConnectBtn.style.display = 'none'; // Hide connect button once active
     
-    appendSerialLog("Port Open. Handshake asserted. Listening for MKR...");
+    dynamicConnectBtn.style.display = 'none'; 
+    calibrateBtn.style.display = 'block'; // Show calibration button
+    
+    appendSerialLog("Port Open. Handshake asserted. Calibrating resting position...");
+    isCalibrated = false;
     readSerialLoop();
   } catch (err) {
     appendSerialLog("Connection Failed: " + err);
@@ -103,9 +124,24 @@ async function readSerialLoop() {
           // Extract first number found using regex
           let match = cleanLine.match(/-?[\d.]+/);
           if (match) {
-            let latestAccel = parseFloat(match[0]);
-            if (!isNaN(latestAccel)) {
-              window.serialTilt = Math.max(-1, Math.min(1, latestAccel / -5.0));
+            let rawVal = parseFloat(match[0]);
+            if (!isNaN(rawVal)) {
+              // Auto-capture zero offset on first valid reading after connection/re-calibration
+              if (!isCalibrated) {
+                serialZeroOffset = rawVal;
+                isCalibrated = true;
+                smoothedTilt = 0;
+                appendSerialLog(`Calibrated! Zero offset set to: ${serialZeroOffset.toFixed(2)}`);
+              }
+
+              // 1. Zero Offset Calibration
+              let calibratedVal = rawVal - serialZeroOffset;
+
+              // 2. Low-Pass Filter (Exponential Moving Average) to remove jitter
+              smoothedTilt = filterAlpha * calibratedVal + (1 - filterAlpha) * smoothedTilt;
+
+              // 3. Scale, apply sensitivity multiplier, and clamp between -1 and 1
+              window.serialTilt = Math.max(-1, Math.min(1, (smoothedTilt / -3.0) * sensitivityMultiplier));
             }
           }
         }
@@ -292,7 +328,7 @@ function updatePlayer(dt) {
     return;
   }
 
-  // Prioritize serial data from MKR if active, otherwise fallback to keyboard Input.axis
+  // Prioritize filtered serial tilt from ICM/MKR if active, fallback to keyboard Input.axis
   let currentTilt = (window.serialTilt !== undefined && !isNaN(window.serialTilt)) ? window.serialTilt : Input.axis;
   const targetVy = currentTilt * CONFIG.player.moveSpeed;
 
