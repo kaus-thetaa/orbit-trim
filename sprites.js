@@ -1,104 +1,51 @@
-// pixel-art sprite definitions, each sprite is a grid of chars mapped to colors
-// '.' always means transparent, everything else is looked up in the palette map
+// pixel-art sprite definitions live below; the horizon/spire generator at
+// the bottom of this file also lives here
 
 const SPRITES = {};
 
-// draws one pixel-grid sprite at x,y (top-left) scaled up into chunky pixels
-function drawPixelGrid(ctx, grid, colors, x, y, scale) {
-  for (let row = 0; row < grid.length; row++) {
-    const line = grid[row];
-    for (let col = 0; col < line.length; col++) {
-      const ch = line[col];
-      if (ch === '.') continue;
-      ctx.fillStyle = colors[ch];
-      ctx.fillRect(
-        Math.round(x + col * scale),
-        Math.round(y + row * scale),
-        scale,
-        scale
-      );
-    }
-  }
-}
-
-function gridWidth(grid) { return grid[0].length; }
-function gridHeight(grid) { return grid.length; }
-
-// ---------- rocket (player) ----------
+// ---------- rocket (player), drawn as a flat ink silhouette facing right ----------
+// coordinates are in local units centered on (0,0), scaled by the caller.
+// nose points +x (right, into oncoming meteors), flame trails -x (left, behind)
 SPRITES.rocket = {
-  colors: {
-    R: '#E8483C',  // nose cone red
-    r: '#B23327',  // nose shade
-    B: '#7D8BA6',  // body blue-grey
-    b: '#5A6784',  // body shade
-    W: '#DCEBF7',  // window
-    G: '#3C4560'   // fin dark
-  },
-  body: [
-    '...RR...',
-    '..RRRR..',
-    '.RRRRRR.',
-    '.rRRRRr.',
-    'BBBBBBBB',
-    'BBBWWBBB',
-    'BBBWWBBB',
-    'bBBBBBBb',
-    'bBBBBBBb',
-    'G.BBBB.G',
-    'G.bbbb.G'
+  ink: '#1C1030',
+  flame: ['#FFC24B', '#FF8A3D', '#FFE08A'], // cycled for a flicker animation
+  body: (w, h) => [
+    [w * 0.5, 0],
+    [w * 0.08, -h * 0.42],
+    [-w * 0.32, -h * 0.34],
+    [-w * 0.46, -h * 0.12],
+    [-w * 0.46, h * 0.12],
+    [-w * 0.32, h * 0.34],
+    [w * 0.08, h * 0.42]
   ],
-  flames: [
-    ['..FF..', '.FFFF.', 'FFFFFF'],
-    ['.FFFF.', 'FFFFFF', '.FFFF.'],
-    ['..FF..', '.FFFF.', '.FFFF.']
+  finTop: (w, h) => [
+    [-w * 0.22, -h * 0.3],
+    [-w * 0.42, -h * 0.62],
+    [-w * 0.06, -h * 0.24]
   ],
-  flameColors: [
-    { F: '#FFC24B' },
-    { F: '#FF8A3D' },
-    { F: '#FFE08A' }
+  finBottom: (w, h) => [
+    [-w * 0.22, h * 0.3],
+    [-w * 0.42, h * 0.62],
+    [-w * 0.06, h * 0.24]
   ]
 };
 
-// ---------- meteor (standard, blue-grey rock + orange-red trail) ----------
+// ---------- meteor (obstacle), irregular ink silhouette with a warm trail ----------
 SPRITES.meteor = {
-  colors: {
-    M: '#5C6478',  // rock core
-    m: '#3E4356',  // rock shade
-    C: '#232637',  // crater
-    T: '#FF6A3D',  // trail outer
-    t: '#FFB25A'   // trail inner
-  },
-  body: [
-    '..MMMM..',
-    '.MMMMMM.',
-    'MMmCMMMM',
-    'MMMMCmMM',
-    'MMMmMMMM',
-    '.MMMMMM.',
-    '..MMMM..'
-  ],
-  trail: [
-    '.tT.',
-    'TtTT',
-    '.tT.'
+  ink: '#1C1030',
+  trailColor: '#FF8A4D',
+  // irregular polygon so it doesn't read as a perfect circle
+  outline: (r) => [
+    [r * 0.9, -r * 0.15], [r * 0.55, -r * 0.75], [r * 0.05, -r],
+    [-r * 0.55, -r * 0.72], [-r * 0.95, -r * 0.1], [-r * 0.62, r * 0.68],
+    [0, r], [r * 0.6, r * 0.6]
   ]
 };
 
-// ---------- satellite (collectible) ----------
+// ---------- satellite (collectible), simple ink silhouette with a bright glint ----------
 SPRITES.satellite = {
-  colors: {
-    W: '#F2ECDD',  // white/tan body
-    w: '#C9C0A6',  // body shade
-    P: '#3FBFB0',  // teal solar panel
-    p: '#2B8F84',  // panel shade
-    S: '#FFC94B'   // spark/glint
-  },
-  body: [
-    'PP.WW.PP',
-    'Pp.WW.pP',
-    'PP.ww.PP',
-    '...S....'
-  ]
+  ink: '#1C1030',
+  glint: '#FFD37A'
 };
 
 // ---------- rolling terrain horizon (foreground layer, alto-style) ----------

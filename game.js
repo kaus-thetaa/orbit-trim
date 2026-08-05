@@ -38,20 +38,15 @@ function resetGame() {
   distance = 0;
   scroll = { back: 0, mid: 0, fore: 0 };
 
-  // rocket sprite is drawn nose-up then rotated 90deg to face right (see
-  // drawPlayer), so its on-screen bounding box has width/height swapped
-  // relative to the raw grid dimensions
-  const rawW = gridWidth(SPRITES.rocket.body) * CONFIG.world.pixelScale;
-  const rawH = gridHeight(SPRITES.rocket.body) * CONFIG.world.pixelScale;
-
+  // rocket silhouette bounding box, faces right by construction (no rotation)
   player = {
     x: CONFIG.player.xPosition,
     y: H * CONFIG.player.startY,
     vy: 0,
     flameFrame: 0,
     flameTimer: 0,
-    w: rawH,
-    h: rawW
+    w: CONFIG.player.width,
+    h: CONFIG.player.height
   };
 
   obstacles = [];
@@ -120,35 +115,32 @@ setOverlay('tap start');
 
 // ---------- spawning ----------
 function spawnObstacle() {
-  const sprite = SPRITES.meteor;
-  const scale = CONFIG.world.pixelScale;
-  const h = gridHeight(sprite.body) * scale;
-  const y = Math.random() * (groundY - h - 40) + 10;
+  const r = CONFIG.obstacles.radius;
+  const y = Math.random() * (groundY - r * 2 - 40) + 10;
 
   const variance = CONFIG.obstacles.speedVariance;
   const speedMult = 1 + (Math.random() * 2 - 1) * variance;
 
   obstacles.push({
-    x: W + 40,
+    x: W + r,
     y,
-    w: gridWidth(sprite.body) * scale,
-    h,
-    sprite,
+    w: r * 2,
+    h: r * 2,
+    r,
     speedMult,
     trailPhase: Math.random() * Math.PI * 2
   });
 }
 
 function spawnCollectible() {
-  const scale = CONFIG.world.pixelScale;
-  const sprite = SPRITES.satellite;
-  const h = gridHeight(sprite.body) * scale;
+  const w = CONFIG.collectibles.width;
+  const h = CONFIG.collectibles.height;
   const y = Math.random() * (groundY - h - 40) + 10;
 
   collectibles.push({
     x: W + 40,
     y,
-    w: gridWidth(sprite.body) * scale,
+    w,
     h,
     bob: Math.random() * Math.PI * 2,
     taken: false
@@ -231,7 +223,7 @@ function updatePlayer(dt) {
   player.flameTimer += dt * 1000;
   if (player.flameTimer > cfg.flameFrameMs) {
     player.flameTimer = 0;
-    player.flameFrame = (player.flameFrame + 1) % cfg.flameFrames;
+    player.flameFrame = (player.flameFrame + 1) % SPRITES.rocket.flame.length;
   }
 }
 
@@ -341,28 +333,11 @@ function render() {
   drawHud();
 }
 
-// launch-screen hero rocket, bigger than gameplay scale with its own idle
-// flame animation so the title screen reads as rocket first, text second
+// launch-screen hero rocket, bigger than gameplay scale, same shared shape
+// so the title screen reads as rocket first, text second
 function drawTitleRocket() {
-  const scale = CONFIG.world.pixelScale * 2.6;
-  const sprite = SPRITES.rocket;
-  const frame = Math.floor(performance.now() / CONFIG.player.flameFrameMs) % CONFIG.player.flameFrames;
-  const flameGrid = sprite.flames[frame];
-  const flameColors = sprite.flameColors[frame];
-
-  const bodyW = gridWidth(sprite.body) * scale;
-  const bodyH = gridHeight(sprite.body) * scale;
-  const cx = W / 2;
-  const cy = H * 0.34;
-  const originX = -bodyW / 2;
-  const originY = -bodyH / 2;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(Math.PI / 2);
-  drawPixelGrid(ctx, flameGrid, flameColors, originX + scale, originY + bodyH - scale, scale);
-  drawPixelGrid(ctx, sprite.body, sprite.colors, originX, originY, scale);
-  ctx.restore();
+  const frame = Math.floor(performance.now() / CONFIG.player.flameFrameMs) % SPRITES.rocket.flame.length;
+  drawRocketShape(W / 2, H * 0.34, CONFIG.player.width * 2.6, CONFIG.player.height * 2.6, frame);
 }
 
 function drawSky() {
@@ -525,42 +500,77 @@ function drawCrescentMoon() {
 }
 
 function drawPlayer() {
-  const scale = CONFIG.world.pixelScale;
+  drawRocketShape(player.x + player.w / 2, player.y + player.h / 2, player.w, player.h, player.flameFrame);
+}
+
+// shared silhouette drawer used by both the gameplay rocket and the title
+// screen hero rocket, so they always stay visually identical
+function drawRocketShape(cx, cy, w, h, flameFrame) {
   const sprite = SPRITES.rocket;
-  const flameGrid = sprite.flames[player.flameFrame];
-  const flameColors = sprite.flameColors[player.flameFrame];
 
-  const bodyW = gridWidth(sprite.body) * scale;
-  const bodyH = gridHeight(sprite.body) * scale;
-  const cx = player.x + player.w / 2;
-  const cy = player.y + player.h / 2;
-  const originX = -bodyW / 2;
-  const originY = -bodyH / 2;
+  ctx.fillStyle = sprite.ink;
+  drawPoly(cx, cy, sprite.body(w, h));
+  drawPoly(cx, cy, sprite.finTop(w, h));
+  drawPoly(cx, cy, sprite.finBottom(w, h));
 
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(Math.PI / 2); // nose faces screen-right, flame trails left behind it
-  drawPixelGrid(ctx, flameGrid, flameColors, originX + scale, originY + bodyH - scale, scale);
-  drawPixelGrid(ctx, sprite.body, sprite.colors, originX, originY, scale);
-  ctx.restore();
+  // flicker flame trailing behind (screen-left), cycles through 3 warm tones
+  const flameLen = w * (0.5 + Math.sin(performance.now() * 0.02) * 0.08);
+  ctx.fillStyle = sprite.flame[flameFrame % sprite.flame.length];
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.46, cy - h * 0.16);
+  ctx.lineTo(cx - w * 0.46 - flameLen, cy);
+  ctx.lineTo(cx - w * 0.46, cy + h * 0.16);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPoly(cx, cy, points) {
+  ctx.beginPath();
+  ctx.moveTo(cx + points[0][0], cy + points[0][1]);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(cx + points[i][0], cy + points[i][1]);
+  }
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawObstacles() {
-  const scale = CONFIG.world.pixelScale;
+  const sprite = SPRITES.meteor;
   for (const o of obstacles) {
-    const trailGrid = o.sprite.trail;
-    const trailX = o.x + o.w - scale * 2 + Math.sin(o.trailPhase) * 2;
-    drawPixelGrid(ctx, trailGrid, o.sprite.colors, trailX, o.y + o.h / 2 - scale * 1.5, scale);
-    drawPixelGrid(ctx, o.sprite.body, o.sprite.colors, o.x, o.y, scale);
+    const cx = o.x + o.r;
+    const cy = o.y + o.r;
+
+    // warm trail streaking behind (screen-right, since meteors move left)
+    const wobble = Math.sin(o.trailPhase) * 3;
+    ctx.fillStyle = sprite.trailColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + o.r * 0.5, cy - o.r * 0.35);
+    ctx.lineTo(cx + o.r * 1.6 + wobble, cy);
+    ctx.lineTo(cx + o.r * 0.5, cy + o.r * 0.35);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = sprite.ink;
+    drawPoly(cx, cy, sprite.outline(o.r));
   }
 }
 
 function drawCollectibles() {
-  const scale = CONFIG.world.pixelScale;
   const sprite = SPRITES.satellite;
   for (const c of collectibles) {
-    const bobY = Math.sin(c.bob) * 4;
-    drawPixelGrid(ctx, sprite.body, sprite.colors, c.x, c.y + bobY, scale);
+    const cx = c.x + c.w / 2;
+    const cy = c.y + c.h / 2 + Math.sin(c.bob) * 4;
+    const w = c.w, h = c.h;
+
+    ctx.fillStyle = sprite.ink;
+    ctx.fillRect(cx - w * 0.15, cy - h * 0.22, w * 0.3, h * 0.44);           // body
+    ctx.fillRect(cx - w * 0.5, cy - h * 0.12, w * 0.3, h * 0.24);            // left panel
+    ctx.fillRect(cx + w * 0.2, cy - h * 0.12, w * 0.3, h * 0.24);            // right panel
+
+    ctx.fillStyle = sprite.glint;
+    ctx.beginPath();
+    ctx.arc(cx, cy, w * 0.06, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 

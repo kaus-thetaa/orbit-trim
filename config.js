@@ -13,13 +13,14 @@ const CONFIG = {
     shootingStar: '#FFE9F2',
     planetCore: '#E7B7D1',
     planetGlow: 'rgba(231, 183, 209, 0.38)',
-    horizonNear: '#2B1B45',   // lit edge of terrain, blends toward sky
-    horizonFar: '#140A24',    // deep silhouette base
+    horizonNear: '#2B1B45',   // lit edge of near terrain, blends toward sky
+    horizonFar: '#140A24',    // deep silhouette base of near terrain
+    horizonFar2: '#4E3D6E',   // far ridge layer, lighter for depth
+    horizonFar2Deep: '#2B1F45',
     hazeColor: 'rgba(255, 166, 193, 0.16)' // atmospheric bleed near ground
   },
 
   world: {
-    pixelScale: 4,          // sprite pixel-art scale factor
     groundHeightRatio: 0.16, // horizon height as fraction of canvas height
     horizonTileWidth: 1400,  // period of the rolling terrain, must tile seamlessly
     horizonSeed: 1337
@@ -40,7 +41,8 @@ const CONFIG = {
     moveSpeed: 620,        // px/sec vertical response to input
     smoothing: 0.22,       // 0-1, higher = snappier
     hitboxPadding: 6,      // shrink hitbox vs sprite bounds for fairness
-    flameFrames: 3,
+    width: 56,
+    height: 34,
     flameFrameMs: 90
   },
 
@@ -49,14 +51,17 @@ const CONFIG = {
     spawnIntervalMin: 620,    // fastest spawn interval reached at ramp
     rampMs: 45000,            // time to reach min spawn interval
     speedVariance: 0.35,      // +/- fraction random speed offset per meteor
-    minGapPx: 210             // minimum vertical gap between simultaneous meteors
+    minGapPx: 210,            // minimum vertical gap between simultaneous meteors
+    radius: 22
   },
 
   collectibles: {
     spawnIntervalStart: 1600,
     spawnIntervalMin: 900,
     rampMs: 45000,
-    scoreValue: 25
+    scoreValue: 25,
+    width: 34,
+    height: 20
   },
 
   score: {
