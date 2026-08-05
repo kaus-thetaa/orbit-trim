@@ -4,6 +4,7 @@ const hud = document.getElementById('hud');
 const overlay = document.getElementById('overlay');
 const connectBtn = document.getElementById('connectBtn'); // Serial connect button
 
+// Load the pixelated rocket image
 const rocketImg = new Image();
 rocketImg.src = 'Screenshot_20260805_194729_Chrome.jpg';
 
@@ -20,19 +21,21 @@ resize();
 
 // ---------- serial input setup ----------
 let serialPort, serialReader;
-connectBtn.addEventListener('click', async () => {
-  try {
-    serialPort = await navigator.serial.requestPort();
-    await serialPort.open({ baudRate: 115200 });
-    const decoder = new TextDecoderStream();
-    serialPort.readable.pipeTo(decoder.writable);
-    serialReader = decoder.readable.getReader();
-    connectBtn.style.display = 'none'; // Hide button once connected
-    readSerialLoop();
-  } catch (err) {
-    console.error("Serial connection failed", err);
-  }
-});
+if (connectBtn) {
+  connectBtn.addEventListener('click', async () => {
+    try {
+      serialPort = await navigator.serial.requestPort();
+      await serialPort.open({ baudRate: 115200 });
+      const decoder = new TextDecoderStream();
+      serialPort.readable.pipeTo(decoder.writable);
+      serialReader = decoder.readable.getReader();
+      connectBtn.style.display = 'none'; // Hide button once connected
+      readSerialLoop();
+    } catch (err) {
+      console.error("Serial connection failed", err);
+    }
+  });
+}
 
 async function readSerialLoop() {
   let buffer = "";
@@ -108,6 +111,7 @@ function buildStarfield() {
 
 resetGame();
 
+// ---------- input wiring ----------
 Input.init(canvas);
 canvas.addEventListener('click', handleTapRestart);
 window.addEventListener('keydown', (e) => {
@@ -434,10 +438,126 @@ function drawSky() {
     ctx.globalAlpha = 1;
   }
 }
-function drawStars() { /* Existing logic... */ }
-function drawShootingStars() { /* Existing logic... */ }
-function drawPlanet() { /* Existing logic... */ return {x:0, y:0, r:0}; }
-function drawHorizon(p) { /* Existing logic... */ }
+
+function drawStars() {
+  const dayFadeAlpha = clamp01((score - 100) / 400); 
+  const p = CONFIG.palette;
+  const offset = wrap(scroll.back, W * 2);
+  for (const s of stars) {
+    const x = wrap(s.x + offset, W * 2);
+    if (x > W) continue;
+    const twinkle = 0.5 + Math.sin(performance.now() * 0.002 + s.tw) * 0.5;
+    ctx.globalAlpha = Math.max(0, (0.4 + twinkle * 0.6) - dayFadeAlpha);
+    ctx.fillStyle = p.star;
+    ctx.beginPath();
+    ctx.arc(x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawShootingStars() {
+  const dayFadeAlpha = clamp01((score - 100) / 400); 
+  ctx.strokeStyle = CONFIG.palette.shootingStar;
+  ctx.lineWidth = 2;
+  for (const s of shootingStars) {
+    ctx.globalAlpha = Math.max(0, clamp01(s.life) - dayFadeAlpha);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + s.len, s.y - s.len * 0.4);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCrescentMoon() {
+  const x = wrap(W * 0.82 + scroll.back * 0.4, W * 1.3) - W * 0.15;
+  const y = H * 0.12;
+  const r = Math.min(W, H) * 0.026;
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = CONFIG.palette.sky2;
+  ctx.beginPath(); ctx.arc(x + r * 0.55, y - r * 0.3, r * 0.92, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawPlanet() {
+  const loopWidth = W * 1.05;
+  const baseX = wrap(planetX + scroll.mid, loopWidth) - loopWidth * 0.08;
+  const y = groundY * 0.3;
+  const r = Math.min(W, H) * 0.2;
+
+  const glow = ctx.createRadialGradient(baseX, y, r * 0.15, baseX, y, r * 3.4);
+  glow.addColorStop(0, 'rgba(255, 214, 230, 0.55)');
+  glow.addColorStop(0.35, CONFIG.palette.planetGlow);
+  glow.addColorStop(1, 'rgba(231,183,209,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(baseX, y, r * 3.4, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = CONFIG.palette.planetCore;
+  ctx.beginPath(); ctx.arc(baseX, y, r, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(163, 74, 117, 0.18)';
+  ctx.beginPath(); ctx.arc(baseX - r * 0.35, y - r * 0.2, r * 0.22, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(baseX + r * 0.28, y + r * 0.32, r * 0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(baseX + r * 0.1, y - r * 0.38, r * 0.1, 0, Math.PI * 2); ctx.fill();
+
+  return { x: baseX, y, r };
+}
+
+function drawHorizon(planet) {
+  const p = CONFIG.palette;
+  const haze = ctx.createLinearGradient(0, groundY - H * 0.34, 0, groundY);
+  haze.addColorStop(0, 'rgba(255,166,193,0)');
+  haze.addColorStop(1, p.hazeColor);
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, groundY - H * 0.34, W, H * 0.34);
+
+  drawHorizonLayer(farHorizon, p.horizonFar2, p.horizonFar2Deep, scroll.mid * 0.6, 0.72, false);
+  drawHorizonLayer(horizon, p.horizonNear, p.horizonFar, scroll.fore, 1, true);
+}
+
+function drawHorizonLayer(layer, colorNear, colorFar, scrollOffset, heightMul, withSpires) {
+  const fill = ctx.createLinearGradient(0, groundY - H * CONFIG.world.groundHeightRatio, 0, H);
+  fill.addColorStop(0, colorNear);
+  fill.addColorStop(1, colorFar);
+
+  const tw = layer.tileWidth;
+  const offset = wrap(scrollOffset, tw);
+  const step = 8;
+
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(-step, H);
+
+  for (let x = -step; x <= W + step; x += step) {
+    const sampleX = wrap(x - offset, tw);
+    const y = groundY - layer.heightAt(sampleX) * heightMul;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W + step, H);
+  ctx.closePath();
+  ctx.fill();
+
+  if (withSpires) {
+    const firstPeriod = Math.floor((-100 - offset) / tw) - 1;
+    const lastPeriod = Math.ceil((W + 100 - offset) / tw) + 1;
+    ctx.fillStyle = colorFar;
+    for (let k = firstPeriod; k <= lastPeriod; k++) {
+      for (const sp of layer.spires) {
+        const screenX = sp.x + offset + k * tw;
+        if (screenX < -60 || screenX > W + 60) continue;
+        const baseY = groundY - layer.heightAt(sp.x);
+        const topY = baseY - sp.height;
+        ctx.beginPath();
+        ctx.moveTo(screenX - sp.width / 2, baseY + 2);
+        ctx.lineTo(screenX, topY);
+        ctx.lineTo(screenX + sp.width / 2, baseY + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+}
 
 function drawPlayer() {
   ctx.save();
@@ -476,7 +596,7 @@ function drawTurrets() {
       ctx.beginPath();
       ctx.moveTo(t.x + t.w/2, groundY - 11);
       ctx.lineTo(player.x + player.w/2, player.y + player.h/2);
-      ctx.strokeStyle = `rgba(255, 59, 59, ${t.reload * 4})`; // Fades in sharply
+      ctx.strokeStyle = `rgba(255, 59, 59, ${t.reload * 4})`; 
       ctx.setLineDash([5, 5]);
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -501,9 +621,54 @@ function drawHud() {
   else { hud.innerHTML = `HI ${highScore} &nbsp;&nbsp; SCORE ${score}`; }
 }
 
-function drawCollectibles() { /* Existing logic... */ }
-function drawDots() { /* Existing logic... */ }
-function drawObstacles() { /* Existing logic... */ }
+function drawCollectibles() {
+  const sprite = SPRITES.satellite;
+  for (const c of collectibles) {
+    const cx = c.x + c.w / 2;
+    const cy = c.y + c.h / 2 + Math.sin(c.bob) * 4;
+    const w = c.w, h = c.h;
+
+    ctx.fillStyle = sprite.ink;
+    ctx.fillRect(cx - w * 0.15, cy - h * 0.22, w * 0.3, h * 0.44);
+    ctx.fillRect(cx - w * 0.5, cy - h * 0.12, w * 0.3, h * 0.24);
+    ctx.fillRect(cx + w * 0.2, cy - h * 0.12, w * 0.3, h * 0.24);
+
+    ctx.fillStyle = sprite.glint;
+    ctx.beginPath();
+    ctx.arc(cx, cy, w * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawDots() {
+  ctx.fillStyle = '#FFE08A';
+  for (const d of dots) {
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawObstacles() {
+  const sprite = SPRITES.meteor;
+  for (const o of obstacles) {
+    const cx = o.x + o.r;
+    const cy = o.y + o.r;
+    const wobble = Math.sin(o.trailPhase) * 3;
+    
+    ctx.fillStyle = sprite.trailColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + o.r * 0.5, cy - o.r * 0.35);
+    ctx.lineTo(cx + o.r * 1.6 + wobble, cy);
+    ctx.lineTo(cx + o.r * 0.5, cy + o.r * 0.35);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = sprite.ink;
+    drawPoly(cx, cy, sprite.outline(o.r));
+  }
+}
+
 function drawParticles() {
   for (const p of particles) {
     ctx.globalAlpha = clamp01(p.life);
