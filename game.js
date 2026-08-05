@@ -118,39 +118,39 @@ async function readSerialLoop() {
       for (let line of lines) {
         let cleanLine = line.trim();
         if (cleanLine.length > 0) {
-          appendSerialLog(cleanLine);
-
-          // Extract first number found using regex
+          
+          // Extract the number from the incoming serial line
           let match = cleanLine.match(/-?[\d.]+/);
           if (match) {
             let rawVal = parseFloat(match[0]);
             if (!isNaN(rawVal)) {
-              // Auto-capture zero offset on first valid reading after connection/re-calibration
+              // Capture zero offset on first valid reading after connection/re-calibration
               if (!isCalibrated) {
                 serialZeroOffset = rawVal;
                 isCalibrated = true;
                 smoothedTilt = 0;
-                appendSerialLog(`Calibrated! Zero offset set to: ${serialZeroOffset.toFixed(2)}`);
+                appendSerialLog(`Calibrated! Zero offset locked at: ${serialZeroOffset.toFixed(2)}`);
               }
 
-              // 1. Zero Offset Calibration
+              // 1. Calculate deviation from neutral resting position
               let calibratedVal = rawVal - serialZeroOffset;
 
-              // 2. Low-Pass Filter (Exponential Moving Average) to remove jitter
+              // 2. Direct pass-through for instant gyro response
               smoothedTilt = filterAlpha * calibratedVal + (1 - filterAlpha) * smoothedTilt;
 
-              // 3. Scale, apply sensitivity multiplier, and clamp between -1 and 1
-              window.serialTilt = Math.max(-1, Math.min(1, (smoothedTilt / -3.0) * sensitivityMultiplier));
+              // 3. Proportional Mapping to Rocket Throttle
+              window.serialTilt = Math.max(-1, Math.min(1, smoothedTilt / tiltScaleFactor));
             }
+          } else {
+            // Only log non-numeric status/error messages to the visible text box
+            appendSerialLog(cleanLine);
           }
         }
       }
     }
     if (done) break;
   }
-}
-
-// ---------- state ----------
+}--
 const STATE = { READY: 'ready', PLAYING: 'playing', CRASHING: 'crashing', DEAD: 'dead' };
 let state = STATE.READY;
 
