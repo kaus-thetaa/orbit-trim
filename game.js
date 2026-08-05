@@ -22,12 +22,12 @@ resize();
 let serialPort, serialReader;
 let serialLogBuffer = [];
 
-// Calibration & Filtering state variables
+// Calibration & Filtering state variables (Optimized for direct Gyro/Accel fusion)
 let serialZeroOffset = 0;
 let isCalibrated = false;
 let smoothedTilt = 0;
-const filterAlpha = 0.25;    // Lower = smoother, Higher = more responsive
-const sensitivityMultiplier = 2.2; // Increase this if it's still moving too little
+const filterAlpha = 1.0;          // Direct pass-through since Arduino handles the fusion
+const tiltScaleFactor = 45.0;     // 45 degrees tilt = 100% rocket throttle (adjust if needed)
 
 // Create UI Container anchored safely to the top-left viewport
 const serialUIContainer = document.createElement('div');
