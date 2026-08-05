@@ -2,7 +2,6 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const hud = document.getElementById('hud');
 const overlay = document.getElementById('overlay');
-const connectBtn = document.getElementById('connectBtn'); // Serial connect button
 
 // Load the pixelated rocket image
 const rocketImg = new Image();
@@ -19,59 +18,67 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ---------- serial input setup & built-in serial monitor UI ----------
+// ---------- bulletproof serial ui & input setup ----------
 let serialPort, serialReader;
 let serialLogBuffer = [];
 
-// Create UI Container for Serial Monitor & Connect status
+// Create UI Container anchored safely to the top-left viewport
 const serialUIContainer = document.createElement('div');
-serialUIContainer.style.cssText = 'position:absolute; top:50px; left:10px; z-index:100; font-family:monospace; display:flex; flex-direction:column; gap:6px; pointer-events:auto;';
+serialUIContainer.style.cssText = 'position:fixed; top:10px; left:10px; z-index:99999; font-family:monospace; display:flex; flex-direction:column; gap:6px; pointer-events:auto;';
 document.body.appendChild(serialUIContainer);
+
+// Dynamically create the Connect Button so it is guaranteed to exist
+const dynamicConnectBtn = document.createElement('button');
+dynamicConnectBtn.innerText = "🔌 Connect MKR Serial";
+dynamicConnectBtn.style.cssText = 'background:#00FF00; color:#000; border:2px solid #fff; padding:8px 12px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:13px; font-weight:bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);';
+serialUIContainer.appendChild(dynamicConnectBtn);
 
 // Toggle Serial Monitor Button
 const toggleMonitorBtn = document.createElement('button');
-toggleMonitorBtn.innerText = "Serial Monitor [Closed]";
+toggleMonitorBtn.innerText = "📊 Serial Monitor [Closed]";
 toggleMonitorBtn.style.cssText = 'background:#222; color:#00FF00; border:1px solid #00FF00; padding:6px 10px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:12px;';
 serialUIContainer.appendChild(toggleMonitorBtn);
 
 // Serial Monitor Console Box
 const monitorBox = document.createElement('div');
-monitorBox.style.cssText = 'display:none; width:320px; height:180px; background:rgba(0,0,0,0.85); color:#00FF00; border:1px solid #00FF00; padding:8px; border-radius:4px; overflow-y:auto; font-size:11px; white-space:pre-wrap;';
-monitorBox.innerText = "Waiting for serial connection...\n";
+monitorBox.style.cssText = 'display:none; width:320px; height:180px; background:rgba(0,0,0,0.95); color:#00FF00; border:1px solid #00FF00; padding:8px; border-radius:4px; overflow-y:auto; font-size:11px; white-space:pre-wrap;';
+monitorBox.innerText = "Serial Monitor Initialized. Click 'Connect MKR Serial' above.\n";
 serialUIContainer.appendChild(monitorBox);
 
 toggleMonitorBtn.addEventListener('click', () => {
   if (monitorBox.style.display === 'none') {
     monitorBox.style.display = 'block';
-    toggleMonitorBtn.innerText = "Serial Monitor [Open]";
+    toggleMonitorBtn.innerText = "📊 Serial Monitor [Open]";
   } else {
     monitorBox.style.display = 'none';
-    toggleMonitorBtn.innerText = "Serial Monitor [Closed]";
+    toggleMonitorBtn.innerText = "📊 Serial Monitor [Closed]";
   }
 });
 
-if (connectBtn) {
-  connectBtn.addEventListener('click', async () => {
-    try {
-      serialPort = await navigator.serial.requestPort();
-      await serialPort.open({ baudRate: 115200 });
-      
-      // MKR Native USB DTR/RTS fix
-      await serialPort.setSignals({ dataTerminalReady: true, requestToSend: true });
-      
-      const decoder = new TextDecoderStream();
-      serialPort.readable.pipeTo(decoder.writable);
-      serialReader = decoder.readable.getReader();
-      connectBtn.style.display = 'none'; 
-      
-      appendSerialLog("Port Open. Initializing MKR handshake...");
-      readSerialLoop();
-    } catch (err) {
-      appendSerialLog("Connection Failed: " + err);
-      console.error("Serial connection failed", err);
-    }
-  });
-}
+dynamicConnectBtn.addEventListener('click', async () => {
+  if (!navigator.serial) {
+    alert("Web Serial API is not supported in this browser! Please use Google Chrome or Microsoft Edge.");
+    return;
+  }
+  try {
+    serialPort = await navigator.serial.requestPort();
+    await serialPort.open({ baudRate: 115200 });
+    
+    // MKR Native USB DTR/RTS handshake fix
+    await serialPort.setSignals({ dataTerminalReady: true, requestToSend: true });
+    
+    const decoder = new TextDecoderStream();
+    serialPort.readable.pipeTo(decoder.writable);
+    serialReader = decoder.readable.getReader();
+    dynamicConnectBtn.style.display = 'none'; // Hide connect button once active
+    
+    appendSerialLog("Port Open. Handshake asserted. Listening for MKR...");
+    readSerialLoop();
+  } catch (err) {
+    appendSerialLog("Connection Failed: " + err);
+    console.error("Serial connection failed", err);
+  }
+});
 
 function appendSerialLog(text) {
   serialLogBuffer.push(text);
@@ -93,7 +100,7 @@ async function readSerialLoop() {
         if (cleanLine.length > 0) {
           appendSerialLog(cleanLine);
 
-          // Robust number extraction using Regex (handles "1.23", "X: 1.23", etc.)
+          // Extract first number found using regex
           let match = cleanLine.match(/-?[\d.]+/);
           if (match) {
             let latestAccel = parseFloat(match[0]);
@@ -451,7 +458,6 @@ function triggerGameOver() {
 
 // ---------- render ----------
 function render() {
-  // CRITICAL FIX: Clear canvas completely every frame to eliminate smear/ghosting trails
   ctx.clearRect(0, 0, W, H);
 
   ctx.save();
