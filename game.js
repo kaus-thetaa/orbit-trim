@@ -21,21 +21,31 @@ resize();
 
 // ---------- serial input setup ----------
 let serialPort, serialReader;
+
+// Create a live debug overlay so we can see exactly what the MKR is sending
+const debugText = document.createElement('div');
+debugText.style.cssText = 'position:absolute; top:50px; left:10px; color:#00FF00; z-index:100; font-family:monospace; background:rgba(0,0,0,0.8); padding:8px; border-radius:4px; pointer-events:none;';
+debugText.innerText = "Debug: Disconnected";
+document.body.appendChild(debugText);
+
 if (connectBtn) {
   connectBtn.addEventListener('click', async () => {
     try {
       serialPort = await navigator.serial.requestPort();
       await serialPort.open({ baudRate: 115200 });
       
-      // THE MKR FIX: Assert DTR and RTS so the native USB unblocks 'while(!Serial)'
+      // The MKR DTR fix
       await serialPort.setSignals({ dataTerminalReady: true, requestToSend: true });
       
       const decoder = new TextDecoderStream();
       serialPort.readable.pipeTo(decoder.writable);
       serialReader = decoder.readable.getReader();
-      connectBtn.style.display = 'none'; // Hide button once connected
+      connectBtn.style.display = 'none'; 
+      
+      debugText.innerText = "Debug: Port Open. Waiting for MKR...";
       readSerialLoop();
     } catch (err) {
+      debugText.innerText = "Debug: Connection Failed!";
       console.error("Serial connection failed", err);
     }
   });
@@ -48,9 +58,16 @@ async function readSerialLoop() {
     if (value) {
       buffer += value;
       let lines = buffer.split('\n');
-      buffer = lines.pop(); 
+      buffer = lines.pop(); // Keep incomplete lines in the buffer
+      
       if (lines.length > 0) {
-        let latestAccel = parseFloat(lines[lines.length - 1]);
+        // Grab the most recent full line to process
+        let lastLine = lines[lines.length - 1].trim();
+        
+        // DISPLAY RAW SERIAL OUTPUT ON SCREEN
+        debugText.innerText = "RAW RX: " + lastLine;
+
+        let latestAccel = parseFloat(lastLine);
         if (!isNaN(latestAccel)) {
           // Map tilt acceleration (roughly -5 to +5 m/s^2) to Input.axis (-1 to 1)
           Input.axis = Math.max(-1, Math.min(1, latestAccel / -5.0));
