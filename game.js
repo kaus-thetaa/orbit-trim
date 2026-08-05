@@ -26,6 +26,10 @@ if (connectBtn) {
     try {
       serialPort = await navigator.serial.requestPort();
       await serialPort.open({ baudRate: 115200 });
+      
+      // THE MKR FIX: Assert DTR and RTS so the native USB unblocks 'while(!Serial)'
+      await serialPort.setSignals({ dataTerminalReady: true, requestToSend: true });
+      
       const decoder = new TextDecoderStream();
       serialPort.readable.pipeTo(decoder.writable);
       serialReader = decoder.readable.getReader();
@@ -56,7 +60,6 @@ async function readSerialLoop() {
     if (done) break;
   }
 }
-
 // ---------- state ----------
 const STATE = { READY: 'ready', PLAYING: 'playing', CRASHING: 'crashing', DEAD: 'dead' };
 let state = STATE.READY;
