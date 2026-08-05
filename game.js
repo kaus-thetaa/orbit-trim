@@ -19,13 +19,36 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ---------- serial input setup with debug & MKR fix ----------
+// ---------- serial input setup & built-in serial monitor UI ----------
 let serialPort, serialReader;
+let serialLogBuffer = [];
 
-const debugText = document.createElement('div');
-debugText.style.cssText = 'position:absolute; top:50px; left:10px; color:#00FF00; z-index:100; font-family:monospace; background:rgba(0,0,0,0.8); padding:8px; border-radius:4px; pointer-events:none;';
-debugText.innerText = "Debug: Disconnected";
-document.body.appendChild(debugText);
+// Create UI Container for Serial Monitor & Connect status
+const serialUIContainer = document.createElement('div');
+serialUIContainer.style.cssText = 'position:absolute; top:50px; left:10px; z-index:100; font-family:monospace; display:flex; flex-direction:column; gap:6px; pointer-events:auto;';
+document.body.appendChild(serialUIContainer);
+
+// Toggle Serial Monitor Button
+const toggleMonitorBtn = document.createElement('button');
+toggleMonitorBtn.innerText = "Serial Monitor [Closed]";
+toggleMonitorBtn.style.cssText = 'background:#222; color:#00FF00; border:1px solid #00FF00; padding:6px 10px; border-radius:4px; cursor:pointer; font-family:monospace; font-size:12px;';
+serialUIContainer.appendChild(toggleMonitorBtn);
+
+// Serial Monitor Console Box
+const monitorBox = document.createElement('div');
+monitorBox.style.cssText = 'display:none; width:320px; height:180px; background:rgba(0,0,0,0.85); color:#00FF00; border:1px solid #00FF00; padding:8px; border-radius:4px; overflow-y:auto; font-size:11px; white-space:pre-wrap;';
+monitorBox.innerText = "Waiting for serial connection...\n";
+serialUIContainer.appendChild(monitorBox);
+
+toggleMonitorBtn.addEventListener('click', () => {
+  if (monitorBox.style.display === 'none') {
+    monitorBox.style.display = 'block';
+    toggleMonitorBtn.innerText = "Serial Monitor [Open]";
+  } else {
+    monitorBox.style.display = 'none';
+    toggleMonitorBtn.innerText = "Serial Monitor [Closed]";
+  }
+});
 
 if (connectBtn) {
   connectBtn.addEventListener('click', async () => {
@@ -41,13 +64,20 @@ if (connectBtn) {
       serialReader = decoder.readable.getReader();
       connectBtn.style.display = 'none'; 
       
-      debugText.innerText = "Debug: Port Open. Waiting for MKR...";
+      appendSerialLog("Port Open. Initializing MKR handshake...");
       readSerialLoop();
     } catch (err) {
-      debugText.innerText = "Debug: Connection Failed!";
+      appendSerialLog("Connection Failed: " + err);
       console.error("Serial connection failed", err);
     }
   });
+}
+
+function appendSerialLog(text) {
+  serialLogBuffer.push(text);
+  if (serialLogBuffer.length > 50) serialLogBuffer.shift();
+  monitorBox.innerText = serialLogBuffer.join('\n');
+  monitorBox.scrollTop = monitorBox.scrollHeight;
 }
 
 async function readSerialLoop() {
@@ -58,14 +88,19 @@ async function readSerialLoop() {
       buffer += value;
       let lines = buffer.split('\n');
       buffer = lines.pop(); 
-      if (lines.length > 0) {
-        let lastLine = lines[lines.length - 1].trim();
-        debugText.innerText = "RAW RX: " + lastLine;
+      for (let line of lines) {
+        let cleanLine = line.trim();
+        if (cleanLine.length > 0) {
+          appendSerialLog(cleanLine);
 
-        let latestAccel = parseFloat(lastLine);
-        if (!isNaN(latestAccel)) {
-          // Map tilt acceleration to independent serial tilt variable
-          window.serialTilt = Math.max(-1, Math.min(1, latestAccel / -5.0));
+          // Robust number extraction using Regex (handles "1.23", "X: 1.23", etc.)
+          let match = cleanLine.match(/-?[\d.]+/);
+          if (match) {
+            let latestAccel = parseFloat(match[0]);
+            if (!isNaN(latestAccel)) {
+              window.serialTilt = Math.max(-1, Math.min(1, latestAccel / -5.0));
+            }
+          }
         }
       }
     }
@@ -251,7 +286,7 @@ function updatePlayer(dt) {
   }
 
   // Prioritize serial data from MKR if active, otherwise fallback to keyboard Input.axis
-  let currentTilt = typeof window.serialTilt !== 'undefined' ? window.serialTilt : Input.axis;
+  let currentTilt = (window.serialTilt !== undefined && !isNaN(window.serialTilt)) ? window.serialTilt : Input.axis;
   const targetVy = currentTilt * CONFIG.player.moveSpeed;
 
   player.vy += (targetVy - player.vy) * CONFIG.player.smoothing;
