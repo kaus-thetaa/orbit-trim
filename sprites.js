@@ -102,7 +102,7 @@ function buildHorizon(tileWidth, baseHeight, seed) {
     const x = rand() * tileWidth;
     spires.push({
       x,
-      height: baseHeight * (0.9 + rand() * 1.1),
+      height: baseHeight * (0.7 + rand() * 0.7), // capped shorter, still a real hazard
       width: baseHeight * (0.1 + rand() * 0.08)
     });
   }
