@@ -73,6 +73,11 @@ const CONFIG = {
     durationMs: 1100      // time in the dying state before game-over shows
   },
 
+  spawnGrace: {
+    durationMs: 2200,   // start-of-run invincibility window, collisions ignored
+    blinkMs: 120         // how fast the rocket flickers during the grace window
+  },
+
   weapon: {
     fireIntervalMs: 220,   // ms between shots, auto-fires while playing
     bulletSpeed: 780,      // px/sec, screen-space rightward
