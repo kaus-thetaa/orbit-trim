@@ -33,6 +33,7 @@ let player, obstacles, collectibles, particles, bullets;
 let spawnTimers, stars, shootingStars, horizon, farHorizon, planetX;
 let collectedScore = 0;
 let deathTimer = 0;
+let graceTimer = 0; // start-of-run invincibility window, counts down to 0
 
 function resetGame() {
   speed = CONFIG.speed.base;
@@ -55,6 +56,7 @@ function resetGame() {
     rotation: 0,
     spin: 0
   };
+  graceTimer = CONFIG.spawnGrace.durationMs;
 
   obstacles = [];
   collectibles = [];
@@ -230,6 +232,8 @@ function update(dt) {
   distance += dt * speed;
   score = Math.floor(distance / CONFIG.score.distancePerPoint) + collectedScore;
 
+  if (graceTimer > 0) graceTimer = Math.max(0, graceTimer - dt * 1000);
+
   updateStars(dt);
   updatePlayer(dt);
   updateObstacles(dt);
@@ -237,8 +241,13 @@ function update(dt) {
   updateBullets(dt);
   updateParticles(dt);
   handleSpawning(dt);
-  checkCollisions();
-  checkTerrainCollision();
+
+  // start-of-run grace window: rocket blinks and can't be hit, so a hazard
+  // that happens to sit right at the fixed spawn point can't insta-kill
+  if (graceTimer <= 0) {
+    checkCollisions();
+    checkTerrainCollision();
+  }
 }
 
 // gravity-driven tumble once the rocket has been hit, ends in a full stop
@@ -671,6 +680,12 @@ function drawPlayer() {
     }
     ctx.restore();
     return;
+  }
+
+  // blink during the start-of-run grace window so invincibility is visible
+  if (state === STATE.PLAYING && graceTimer > 0) {
+    const on = Math.floor(performance.now() / CONFIG.spawnGrace.blinkMs) % 2 === 0;
+    if (!on) return;
   }
 
   if (usePixelSkin) {
