@@ -35,6 +35,43 @@ let collectedScore = 0;
 let deathTimer = 0;
 let graceTimer = 0; // start-of-run invincibility window, counts down to 0
 
+// ---------- serial monitor & connect UI ----------
+let serialLogs = [];
+const MAX_SERIAL_LOGS = 12;
+let showSerialMonitor = false; // Start hidden, toggle with 'M'
+
+// Create a visible connect button directly in the DOM
+const connectBtn = document.createElement('button');
+connectBtn.innerText = '🔗 Connect Hardware';
+connectBtn.style.position = 'absolute';
+connectBtn.style.top = '20px';
+connectBtn.style.right = '20px';
+connectBtn.style.padding = '10px 15px';
+connectBtn.style.fontFamily = 'monospace';
+connectBtn.style.fontSize = '14px';
+connectBtn.style.background = 'rgba(0, 0, 0, 0.65)';
+connectBtn.style.color = '#00FF00';
+connectBtn.style.border = '1px solid #00FF00';
+connectBtn.style.cursor = 'pointer';
+connectBtn.style.zIndex = '1000';
+connectBtn.style.display = 'none'; // Hidden by default
+document.body.appendChild(connectBtn);
+
+// Wire the button to the Input script's serial request function
+connectBtn.addEventListener('click', () => {
+  if (typeof Input !== 'undefined' && Input.requestSerialConnect) {
+    Input.requestSerialConnect();
+  }
+});
+
+// Expose globally so Input.js can push incoming webserial data here
+window.logToSerialMonitor = function(text) {
+  serialLogs.push(text);
+  if (serialLogs.length > MAX_SERIAL_LOGS) {
+    serialLogs.shift();
+  }
+};
+
 function resetGame() {
   speed = CONFIG.speed.base;
   elapsed = 0;
@@ -101,6 +138,11 @@ canvas.addEventListener('click', (e) => {
 });
 window.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Enter') handleTapRestart();
+  if (e.key.toLowerCase() === 'm') {
+    showSerialMonitor = !showSerialMonitor;
+    // Toggle the visible connect button along with the monitor
+    connectBtn.style.display = showSerialMonitor ? 'block' : 'none';
+  }
 });
 
 // hidden long-press gesture to open the browser's serial port picker.
@@ -500,6 +542,31 @@ function render() {
   }
 
   drawHud();
+  drawSerialMonitor();
+}
+
+function drawSerialMonitor() {
+  if (!showSerialMonitor) return;
+  
+  ctx.save();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  // Always draw the background box so you know the monitor is active, even if logs are empty
+  const boxHeight = Math.max(20 + (serialLogs.length * 16), 40); 
+  ctx.fillRect(10, 50, 320, boxHeight);
+
+  ctx.fillStyle = '#00FF00'; // Classic terminal green
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  
+  if (serialLogs.length === 0) {
+    ctx.fillText("Waiting for incoming serial data...", 20, 60);
+  } else {
+    for (let i = 0; i < serialLogs.length; i++) {
+      ctx.fillText(serialLogs[i], 20, 60 + i * 16);
+    }
+  }
+  ctx.restore();
 }
 
 // launch-screen hero rocket, bigger than gameplay scale, same shared shape
