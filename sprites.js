@@ -48,6 +48,28 @@ SPRITES.satellite = {
   glint: '#FFD37A'
 };
 
+// ---------- pixel-art rocket skin, unlocked as a reward at a score milestone ----------
+// authored already facing right so no rotation transform is ever needed
+SPRITES.rocketPixel = {
+  colors: {
+    R: '#E8483C', // nose red
+    r: '#B23327', // nose shade
+    B: '#7D8BA6', // body blue-grey
+    b: '#5A6784', // body shade
+    W: '#DCEBF7'  // window
+  },
+  grid: [
+    '.......RR...',
+    'bBBBBBBBRR..',
+    'BBBBBBBWWRR.',
+    'BBBBBBBWWWRR',
+    'BBBBBBBWWRR.',
+    'bBBBBBBBRR..',
+    '.......RR...'
+  ],
+  flameColors: ['#FFC24B', '#FF8A3D', '#FFE08A']
+};
+
 // ---------- rolling terrain horizon (foreground layer, alto-style) ----------
 // smooth silhouette built from a few stacked sine waves instead of jagged
 // random spikes, tuned with integer frequencies so it repeats perfectly
